@@ -1,30 +1,26 @@
-from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 import os
+import firebase_admin
+from firebase_admin import credentials, db
+from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 
 app = Flask(__name__)
 app.secret_key = "spider_man_secret_admin_key_change_this"
 
-# Database (Fixed keys conflict issue)
-DATABASE = {
-    "license_keys": {
-        "SPIDER-WOLF-777": {"active": True, "device_id": None},
-        "ADMIN-KEY-999": {"active": True, "device_id": None}
-    },
-    "config": {
-        "is_app_active": True  # Master Kill Switch
-    }
-}
+# Initialize Firebase with your Database URL & Credentials file
+cred = credentials.path("firebase_credentials.json")
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://fetchallekyc-default-rtdb.firebaseio.com/'
+})
 
 # Admin Credentials
 ADMIN_USER = "Aman77"
 ADMIN_PASS = "Aman77"
 
-# Root URL open hone par seedha /admin par bhej dega
 @app.route('/')
 def home():
     return redirect(url_for('admin_login'))
 
-# --- API Endpoints (AIDE Pro App ke liye) ---
+# --- API: Verify Key from Firebase ---
 @app.route('/api/verify-key', methods=['POST'])
 def verify_key():
     try:
@@ -32,26 +28,31 @@ def verify_key():
         key = data.get('key')
         device_id = data.get('deviceId')
 
-        if not DATABASE["config"]["is_app_active"]:
+        ref = db.reference('/')
+        db_data = ref.get() or {}
+        
+        config = db_data.get("config", {"is_app_active": True})
+        if not config.get("is_app_active", True):
             return jsonify({"success": False, "message": "App is locked by Admin!"})
 
-        if not key or key not in DATABASE["license_keys"]:
+        keys_dict = db_data.get("license_keys", {})
+        if not key or key not in keys_dict:
             return jsonify({"success": False, "message": "Invalid or expired activation key!"})
 
-        key_data = DATABASE["license_keys"][key]
-        if not key_data["active"]:
+        key_data = keys_dict[key]
+        if not key_data.get("active", True):
             return jsonify({"success": False, "message": "This key has been disabled!"})
 
-        if key_data["device_id"] is None:
-            key_data["device_id"] = device_id
-        elif key_data["device_id"] != device_id:
+        if key_data.get("device_id") is None:
+            db.reference(f'license_keys/{key}').update({"device_id": device_id})
+        elif key_data.get("device_id") != device_id:
             return jsonify({"success": False, "message": "Key already bound to another device!"})
 
         return jsonify({"success": True, "message": "Key verified successfully!"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
-# --- Admin Panel HTML Template ---
+# --- Admin Panel & Routes with Firebase ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -116,13 +117,15 @@ HTML_TEMPLATE = """
                     <th>Device Bound</th>
                     <th>Action</th>
                 </tr>
-                {% for key, info in data.license_keys.items() %}
-                <tr>
-                    <td>{{ key }}</td>
-                    <td>{{ info.device_id if info.device_id else 'Not Bound' }}</td>
-                    <td><a href="{{ url_for('delete_key', key_name=key) }}" style="color: #ff334b; text-decoration: none;">Delete</a></td>
-                </tr>
-                {% endfor %}
+                {% if data.license_keys %}
+                    {% for key, info in data.license_keys.items() %}
+                    <tr>
+                        <td>{{ key }}</td>
+                        <td>{{ info.device_id if info.device_id else 'Not Bound' }}</td>
+                        <td><a href="{{ url_for('delete_key', key_name=key) }}" style="color: #ff334b; text-decoration: none;">Delete</a></td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
             </table>
             
             <br>
@@ -133,14 +136,11 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- Admin Panel Routes ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_login():
     error = None
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if username == ADMIN_USER and password == ADMIN_PASS:
+        if request.form.get('username') == ADMIN_USER and request.form.get('password') == ADMIN_PASS:
             session['logged_in'] = True
             return redirect(url_for('admin_dashboard'))
         else:
@@ -151,15 +151,19 @@ def admin_login():
 def admin_dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
-    return render_template_string(HTML_TEMPLATE, logged_in=True, data=DATABASE)
+    
+    ref = db.reference('/')
+    data = ref.get() or {"license_keys": {}, "config": {"is_app_active": True}}
+    return render_template_string(HTML_TEMPLATE, logged_in=True, data=data)
 
 @app.route('/admin/toggle-app', methods=['POST'])
 def toggle_app():
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
     
-    current_status = DATABASE["config"]["is_app_active"]
-    DATABASE["config"]["is_app_active"] = not current_status
+    ref = db.reference('config/is_app_active')
+    current_status = ref.get() if ref.get() is not None else True
+    ref.set(not current_status)
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/add-key', methods=['POST'])
@@ -169,7 +173,7 @@ def add_key():
     
     new_key = request.form.get('new_key')
     if new_key:
-        DATABASE["license_keys"][new_key] = {"active": True, "device_id": None}
+        db.reference(f'license_keys/{new_key}').set({"active": True, "device_id": None})
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/delete-key/<key_name>')
@@ -177,8 +181,7 @@ def delete_key(key_name):
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
     
-    if key_name in DATABASE["license_keys"]:
-        del DATABASE["license_keys"][key_name]
+    db.reference(f'license_keys/{key_name}').delete()
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/logout')
