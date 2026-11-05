@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spider-Man Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background: #0b0f19; color: #fff; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 600px; background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 1px solid rgba(0,242,254,0.2); }
+        h2 { color: #00f2fe; margin-bottom: 20px; text-align: center; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #fff; outline: none; }
+        button { background: #ff334b; border: none; font-weight: 600; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left; font-size: 13px; }
+        th { color: #00f2fe; }
+        .error { color: #ff334b; text-align: center; font-size: 13px; }
+        .status-box { background: rgba(0,242,254,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if not logged_in %}
+            <h2>Admin Login</h2>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="POST">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit">Login</button>
+            </form>
+        {% else %}
+            <h2>Spider-Man Control Panel</h2>
+            
+            <div class="status-box">
+                <div>
+                    <strong>App Status:</strong> 
+                    <span style="color: {% if data.config.is_app_active %}#00ffcc{% else %}#ff334b{% endif %};">
+                        {% if data.config.is_app_active %}ONLINE (Active){% else %}OFFLINE (Locked){% endif %}
+                    </span>
+                </div>
+                <form action="{{ url_for('toggle_app') }}" method="POST" style="width: auto; margin:0;">
+                    <button type="submit" style="padding: 6px 12px; background: {% if data.config.is_app_active %}#ff334b{% else %}#00ffcc{% endif %}; color: #000;">
+                        {% if data.config.is_app_active %}Lock App{% else %}Unlock App{% endif %}
+                    </button>
+                </form>
+            </div>
+
+            <h3>Generate New Key</h3>
+            <form action="{{ url_for('add_key') }}" method="POST">
+                <input type="text" name="new_key" placeholder="Enter New License Key" required>
+                <button type="submit">Add Key</button>
+            </form>
+
+            <h3>Existing Keys</h3>
+            <table>
+                <tr>
+                    <th>License Key</th>
+                    <th>Device Bound</th>
+                    <th>Action</th>
+                </tr>
+                {% for key, info in data.keys.items() %}
+                <tr>
+                    <td>{{ key }}</td>
+                    <td>{{ info.device_id if info.device_id else 'Not Bound' }}</td>
+                    <td><a href="{{ url_for('delete_key', key_name=key) }}" style="color: #ff334b; text-decoration: none;">Delete</a></td>
+                </tr>
+                {% endfor %}
+            </table>
+            
+            <br>
+            <a href="{{ url_for('logout') }}"><button style="background:#444;">Logout</button></a>
+        {% endif %}
+    </div>
+</body>
+</html>
