@@ -6,8 +6,8 @@ from flask import Flask, render_template_string, request, jsonify, redirect, url
 app = Flask(__name__)
 app.secret_key = "spider_man_secret_admin_key_change_this"
 
-# Initialize Firebase with your Database URL & Credentials file
-cred = credentials.path("firebase_credentials.json")
+# Initialize Firebase with Certificate object (Fixes the attribute error)
+cred = credentials.Certificate("firebase_credentials.json")
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://fetchallekyc-default-rtdb.firebaseio.com/'
 })
