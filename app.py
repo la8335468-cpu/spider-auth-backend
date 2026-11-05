@@ -1,20 +1,12 @@
 import os
-import firebase_admin
-from firebase_admin import credentials, db
+import requests
 from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 
 app = Flask(__name__)
 app.secret_key = "spider_man_secret_admin_key_change_this"
 
-# Check path for Render Secret Files or Local directory
-cred_path = "/etc/secrets/firebase_credentials.json"
-if not os.path.exists(cred_path):
-    cred_path = "firebase_credentials.json"
-
-cred = credentials.Certificate(cred_path)
-firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://fetchallekyc-default-rtdb.firebaseio.com/'
-})
+# Firebase Database URL
+FIREBASE_URL = "https://fetchallekyc-default-rtdb.firebaseio.com"
 
 # Admin Credentials
 ADMIN_USER = "Aman77"
@@ -24,7 +16,7 @@ ADMIN_PASS = "Aman77"
 def home():
     return redirect(url_for('admin_login'))
 
-# --- API: Verify Key from Firebase ---
+# --- API: Verify Key from Firebase REST API (AIDE Pro App ke liye) ---
 @app.route('/api/verify-key', methods=['POST'])
 def verify_key():
     try:
@@ -32,8 +24,9 @@ def verify_key():
         key = data.get('key')
         device_id = data.get('deviceId')
 
-        ref = db.reference('/')
-        db_data = ref.get() or {}
+        # Fetch data from Firebase
+        response = requests.get(f"{FIREBASE_URL}/.json")
+        db_data = response.json() or {}
         
         config = db_data.get("config", {"is_app_active": True})
         if not config.get("is_app_active", True):
@@ -48,7 +41,8 @@ def verify_key():
             return jsonify({"success": False, "message": "This key has been disabled!"})
 
         if key_data.get("device_id") is None:
-            db.reference(f'license_keys/{key}').update({"device_id": device_id})
+            # Bind device ID on first use
+            requests.patch(f"{FIREBASE_URL}/license_keys/{key}.json", json={"device_id": device_id})
         elif key_data.get("device_id") != device_id:
             return jsonify({"success": False, "message": "Key already bound to another device!"})
 
@@ -56,7 +50,7 @@ def verify_key():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
-# --- Admin Panel & Routes with Firebase ---
+# --- Admin Panel HTML Template ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -140,6 +134,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# --- Admin Panel Routes ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_login():
     error = None
@@ -156,8 +151,8 @@ def admin_dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
     
-    ref = db.reference('/')
-    data = ref.get() or {"license_keys": {}, "config": {"is_app_active": True}}
+    response = requests.get(f"{FIREBASE_URL}/.json")
+    data = response.json() or {"license_keys": {}, "config": {"is_app_active": True}}
     return render_template_string(HTML_TEMPLATE, logged_in=True, data=data)
 
 @app.route('/admin/toggle-app', methods=['POST'])
@@ -165,9 +160,12 @@ def toggle_app():
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
     
-    ref = db.reference('config/is_app_active')
-    current_status = ref.get() if ref.get() is not None else True
-    ref.set(not current_status)
+    response = requests.get(f"{FIREBASE_URL}/config/is_app_active.json")
+    current_status = response.json()
+    if current_status is None:
+        current_status = True
+    
+    requests.put(f"{FIREBASE_URL}/config/is_app_active.json", json=not current_status)
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/add-key', methods=['POST'])
@@ -177,7 +175,7 @@ def add_key():
     
     new_key = request.form.get('new_key')
     if new_key:
-        db.reference(f'license_keys/{new_key}').set({"active": True, "device_id": None})
+        requests.patch(f"{FIREBASE_URL}/license_keys.json", json={new_key: {"active": True, "device_id": None}})
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/delete-key/<key_name>')
@@ -185,7 +183,7 @@ def delete_key(key_name):
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
     
-    db.reference(f'license_keys/{key_name}').delete()
+    requests.delete(f"{FIREBASE_URL}/license_keys/{key_name}.json")
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/logout')
