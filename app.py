@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
+import os
 
-app = Flask(__name__, template_folder='.')
+app = Flask(__name__)
 app.secret_key = "spider_man_secret_admin_key_change_this"
 
 # Database (Demo memory dictionary)
@@ -10,12 +11,13 @@ DATABASE = {
         "ADMIN-KEY-999": {"active": True, "device_id": None}
     },
     "config": {
-        "is_app_active": True  
+        "is_app_active": True  # Master Kill Switch
     }
 }
 
-ADMIN_USER = "admin"
-ADMIN_PASS = "wolf1ed"
+# Updated Admin Credentials
+ADMIN_USER = "Aman77"
+ADMIN_PASS = "Aman77"
 
 # Root URL open hone par seedha /admin par bhej dega
 @app.route('/')
@@ -49,9 +51,92 @@ def verify_key():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
+# --- Admin Panel HTML Template ---
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spider-Man Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background: #0b0f19; color: #fff; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 600px; background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); padding: 30px; border-radius: 15px; border: 1px solid rgba(0,242,254,0.2); margin-top: 40px; }
+        h2 { color: #00f2fe; margin-bottom: 20px; text-align: center; }
+        h3 { color: #00f2fe; margin-top: 20px; margin-bottom: 10px; font-size: 16px; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #fff; outline: none; }
+        button { background: #ff334b; border: none; font-weight: 600; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        table { width: 100%; margin-top: 10px; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left; font-size: 13px; }
+        th { color: #00f2fe; }
+        .error { color: #ff334b; text-align: center; font-size: 13px; margin-bottom: 10px; }
+        .status-box { background: rgba(0,242,254,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if not logged_in %}
+            <h2>Spider-Man Admin Login</h2>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="POST">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit">Login</button>
+            </form>
+        {% else %}
+            <h2>Spider-Man Control Panel</h2>
+            
+            <div class="status-box">
+                <div>
+                    <strong>App Status:</strong> 
+                    <span style="color: {% if data.config.is_app_active %}#00ffcc{% else %}#ff334b{% endif %};">
+                        {% if data.config.is_app_active %}ONLINE (Active){% else %}OFFLINE (Locked){% endif %}
+                    </span>
+                </div>
+                <form action="{{ url_for('toggle_app') }}" method="POST" style="width: auto; margin:0;">
+                    <button type="submit" style="padding: 6px 12px; background: {% if data.config.is_app_active %}#ff334b{% else %}#00ffcc{% endif %}; color: #000;">
+                        {% if data.config.is_app_active %}Lock App{% else %}Unlock App{% endif %}
+                    </button>
+                </form>
+            </div>
+
+            <h3>Generate New Key</h3>
+            <form action="{{ url_for('add_key') }}" method="POST">
+                <input type="text" name="new_key" placeholder="Enter New License Key" required>
+                <button type="submit">Add Key</button>
+            </form>
+
+            <h3>Existing Keys</h3>
+            <table>
+                <tr>
+                    <th>License Key</th>
+                    <th>Device Bound</th>
+                    <th>Action</th>
+                </tr>
+                {% for key, info in data.keys.items() %}
+                <tr>
+                    <td>{{ key }}</td>
+                    <td>{{ info.device_id if info.device_id else 'Not Bound' }}</td>
+                    <td><a href="{{ url_for('delete_key', key_name=key) }}" style="color: #ff334b; text-decoration: none;">Delete</a></td>
+                </tr>
+                {% endfor %}
+            </table>
+            
+            <br>
+            <a href="{{ url_for('logout') }}"><button style="background:#444;">Logout</button></a>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
+
 # --- Admin Panel Routes ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_login():
+    error = None
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -59,14 +144,14 @@ def admin_login():
             session['logged_in'] = True
             return redirect(url_for('admin_dashboard'))
         else:
-            return render_template('admin.html', error="Invalid Username or Password", logged_in=False)
-    return render_template('admin.html', logged_in=False)
+            error = "Invalid Username or Password"
+    return render_template_string(HTML_TEMPLATE, logged_in=False, error=error)
 
 @app.route('/admin/dashboard')
 def admin_dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
-    return render_template('admin.html', data=DATABASE, logged_in=True)
+    return render_template_string(HTML_TEMPLATE, logged_in=True, data=DATABASE)
 
 @app.route('/admin/toggle-app', methods=['POST'])
 def toggle_app():
@@ -102,4 +187,5 @@ def logout():
     return redirect(url_for('admin_login'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
