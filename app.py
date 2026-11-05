@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 
-app = Flask(__name__)
-app.secret_key = "spider_man_secret_admin_key_change_this"  # Session security ke liye
+# template_folder='.' se admin.html seedhe root folder se load hoga
+app = Flask(__name__, template_folder='.')
+app.secret_key = "spider_man_secret_admin_key_change_this"
 
-# Database (Demo ke liye dictionary, aap ise file ya database se bhi jod sakte hain)
+# Database (Demo ke liye dictionary)
 DATABASE = {
     "keys": {
         "SPIDER-WOLF-777": {"active": True, "device_id": None},
@@ -14,7 +15,6 @@ DATABASE = {
     }
 }
 
-# Admin Login Credentials
 ADMIN_USER = "admin"
 ADMIN_PASS = "wolf1ed"
 
@@ -25,7 +25,6 @@ def verify_key():
     key = data.get('key')
     device_id = data.get('deviceId')
 
-    # Check Master Kill Switch
     if not DATABASE["config"]["is_app_active"]:
         return jsonify({"success": False, "message": "App is locked by Admin!"})
 
@@ -36,7 +35,6 @@ def verify_key():
     if not key_data["active"]:
         return jsonify({"success": False, "message": "This key has been disabled!"})
 
-    # Device Binding
     if key_data["device_id"] is None:
         key_data["device_id"] = device_id
     elif key_data["device_id"] != device_id:
