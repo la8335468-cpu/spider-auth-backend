@@ -4,9 +4,9 @@ import os
 app = Flask(__name__)
 app.secret_key = "spider_man_secret_admin_key_change_this"
 
-# Database (Demo memory dictionary)
+# Database (Fixed keys conflict issue)
 DATABASE = {
-    "keys": {
+    "license_keys": {
         "SPIDER-WOLF-777": {"active": True, "device_id": None},
         "ADMIN-KEY-999": {"active": True, "device_id": None}
     },
@@ -15,7 +15,7 @@ DATABASE = {
     }
 }
 
-# Updated Admin Credentials
+# Admin Credentials
 ADMIN_USER = "Aman77"
 ADMIN_PASS = "Aman77"
 
@@ -35,10 +35,10 @@ def verify_key():
         if not DATABASE["config"]["is_app_active"]:
             return jsonify({"success": False, "message": "App is locked by Admin!"})
 
-        if not key or key not in DATABASE["keys"]:
+        if not key or key not in DATABASE["license_keys"]:
             return jsonify({"success": False, "message": "Invalid or expired activation key!"})
 
-        key_data = DATABASE["keys"][key]
+        key_data = DATABASE["license_keys"][key]
         if not key_data["active"]:
             return jsonify({"success": False, "message": "This key has been disabled!"})
 
@@ -116,7 +116,7 @@ HTML_TEMPLATE = """
                     <th>Device Bound</th>
                     <th>Action</th>
                 </tr>
-                {% for key, info in data.keys.items() %}
+                {% for key, info in data.license_keys.items() %}
                 <tr>
                     <td>{{ key }}</td>
                     <td>{{ info.device_id if info.device_id else 'Not Bound' }}</td>
@@ -169,7 +169,7 @@ def add_key():
     
     new_key = request.form.get('new_key')
     if new_key:
-        DATABASE["keys"][new_key] = {"active": True, "device_id": None}
+        DATABASE["license_keys"][new_key] = {"active": True, "device_id": None}
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/delete-key/<key_name>')
@@ -177,8 +177,8 @@ def delete_key(key_name):
     if not session.get('logged_in'):
         return redirect(url_for('admin_login'))
     
-    if key_name in DATABASE["keys"]:
-        del DATABASE["keys"][key_name]
+    if key_name in DATABASE["license_keys"]:
+        del DATABASE["license_keys"][key_name]
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/logout')
